@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Justin P — Photo Map</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cream: #f0ebe3;
+      --gold: #c9a96e;
+      --dark: #0e0e0e;
+      --mid: #1a1a1a;
+      --panel: rgba(10,10,10,0.92);
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--dark);
+      font-family: 'Montserrat', sans-serif;
+      overflow: hidden;
+    }
+
+    /* ── MAP ── */
+    #map {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+    }
+
+    /* hide leaflet branding subtly */
+    .leaflet-control-attribution {
+      background: rgba(0,0,0,0.4) !important;
+      color: rgba(255,255,255,0.3) !important;
+      font-size: 9px !important;
+    }
+    .leaflet-control-attribution a { color: rgba(255,255,255,0.3) !important; }
+    .leaflet-control-zoom a {
+      background: var(--mid) !important;
+      color: var(--cream) !important;
+      border-color: #333 !important;
+    }
+    .leaflet-control-zoom a:hover { background: #2a2a2a !important; }
+
+    /* ── HEADER ── */
+    #header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 22px 36px;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, transparent 100%);
+      pointer-events: none;
+    }
+    #header h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 300;
+      font-size: 22px;
+      letter-spacing: 0.12em;
+      color: var(--cream);
+      text-transform: uppercase;
+    }
+    #header .subtitle {
+      font-size: 10px;
+      letter-spacing: 0.25em;
+      color: var(--gold);
+      text-transform: uppercase;
+      font-weight: 300;
+    }
+
+    /* ── CUSTOM MARKER ── */
+    .photo-marker-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .photo-marker-icon {
+      width: 36px; height: 36px;
+      background: var(--dark);
+      border: 1.5px solid var(--gold);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.2s, background 0.2s;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.6);
+    }
+    .photo-marker-icon svg {
+      width: 15px; height: 15px;
+      fill: var(--gold);
+    }
+    .photo-marker-icon:hover {
+      background: var(--gold);
+      transform: scale(1.15);
+    }
+    .photo-marker-icon:hover svg { fill: var(--dark); }
+
+    .marker-count {
+      position: absolute;
+      top: -5px; right: -5px;
+      background: var(--gold);
+      color: var(--dark);
+      font-size: 9px;
+      font-weight: 400;
+      letter-spacing: 0;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    /* ── POPUP ── */
+    .leaflet-popup-content-wrapper {
+      background: var(--panel) !important;
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(201,169,110,0.25) !important;
+      border-radius: 0 !important;
+      padding: 0 !important;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.8) !important;
+      width: 280px !important;
+    }
+    .leaflet-popup-content {
+      margin: 0 !important;
+      width: 100% !important;
+    }
+    .leaflet-popup-tip-container { display: none !important; }
+    .leaflet-popup-close-button {
+      color: var(--gold) !important;
+      font-size: 18px !important;
+      top: 8px !important;
+      right: 10px !important;
+      z-index: 10;
+    }
+
+    .popup-inner {
+      padding: 20px 20px 16px;
+    }
+    .popup-location {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 300;
+      font-size: 17px;
+      color: var(--cream);
+      letter-spacing: 0.04em;
+      margin-bottom: 14px;
+      padding-right: 20px;
+    }
+    .popup-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+    .popup-grid.single { grid-template-columns: 1fr; }
+    .popup-grid.two { grid-template-columns: repeat(2, 1fr); }
+
+    .popup-thumb {
+      aspect-ratio: 1;
+      overflow: hidden;
+      cursor: pointer;
+      position: relative;
+    }
+    .popup-grid.single .popup-thumb { aspect-ratio: 3/2; }
+
+    .popup-thumb img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.35s ease, filter 0.35s ease;
+      filter: brightness(0.85);
+    }
+    .popup-thumb:hover img {
+      transform: scale(1.07);
+      filter: brightness(1.05);
+    }
+    .popup-thumb::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(201,169,110,0);
+      transition: background 0.25s;
+      pointer-events: none;
+    }
+    .popup-thumb:hover::after { background: rgba(201,169,110,0.1); }
+
+    .popup-view-all {
+      text-align: center;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: var(--gold);
+      text-transform: uppercase;
+      cursor: pointer;
+      padding-top: 4px;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+    }
+    .popup-view-all:hover { opacity: 1; }
+
+    /* ── LIGHTBOX ── */
+    #lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      background: rgba(0,0,0,0.96);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    #lightbox.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    #lb-close {
+      position: absolute;
+      top: 20px; right: 28px;
+      font-size: 28px;
+      color: var(--cream);
+      cursor: pointer;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+      z-index: 10;
+      background: none; border: none;
+      font-family: 'Montserrat', sans-serif;
+      line-height: 1;
+    }
+    #lb-close:hover { opacity: 1; }
+
+    #lb-img-wrap {
+      position: relative;
+      max-width: 90vw;
+      max-height: 82vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #lb-img {
+      max-width: 90vw;
+      max-height: 78vh;
+      object-fit: contain;
+      display: block;
+      box-shadow: 0 0 80px rgba(0,0,0,0.8);
+      opacity: 0;
+      transform: scale(0.97);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    #lb-img.loaded { opacity: 1; transform: scale(1); }
+
+    #lb-location {
+      margin-top: 18px;
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 15px;
+      font-weight: 300;
+      font-style: italic;
+      color: var(--gold);
+      letter-spacing: 0.08em;
+    }
+    #lb-counter {
+      margin-top: 6px;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: rgba(255,255,255,0.35);
+      text-transform: uppercase;
+    }
+
+    .lb-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: 1px solid rgba(201,169,110,0.3);
+      color: var(--gold);
+      font-size: 20px;
+      width: 44px; height: 44px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.2s, background 0.2s;
+      z-index: 10;
+    }
+    .lb-nav:hover {
+      background: rgba(201,169,110,0.12);
+      border-color: var(--gold);
+    }
+    .lb-nav.hidden { display: none; }
+    #lb-prev { left: -60px; }
+    #lb-next { right: -60px; }
+
+    /* thumbnail strip in lightbox */
+    #lb-strip {
+      display: flex;
+      gap: 6px;
+      margin-top: 16px;
+      max-width: 90vw;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    #lb-strip::-webkit-scrollbar { height: 2px; background: #222; }
+    #lb-strip::-webkit-scrollbar-thumb { background: var(--gold); }
+    .lb-strip-thumb {
+      width: 48px; height: 36px;
+      flex-shrink: 0;
+      cursor: pointer;
+      opacity: 0.4;
+      transition: opacity 0.2s;
+      overflow: hidden;
+      border: 1px solid transparent;
+    }
+    .lb-strip-thumb.active {
+      opacity: 1;
+      border-color: var(--gold);
+    }
+    .lb-strip-thumb img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+
+    /* ── LEGEND ── */
+    #legend {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--panel);
+      border: 1px solid rgba(201,169,110,0.2);
+      padding: 9px 18px;
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      color: rgba(255,255,255,0.45);
+      text-transform: uppercase;
+      pointer-events: none;
+      backdrop-filter: blur(10px);
+    }
+    #legend span { color: var(--gold); }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>Justin P</h1>
+  <div class="subtitle">Photo Map &nbsp;·&nbsp; <span id="photo-count-label"></span> Locations</div>
+</div>
+
+<div id="map"></div>
+
+<div id="legend">
+  <span>◎</span> Click a marker to explore photos
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox">
+  <button id="lb-close">×</button>
+  <div id="lb-img-wrap">
+    <button class="lb-nav hidden" id="lb-prev">‹</button>
+    <img id="lb-img" src="" alt="">
+    <button class="lb-nav hidden" id="lb-next">›</button>
+  </div>
+  <div id="lb-location"></div>
+  <div id="lb-counter"></div>
+  <div id="lb-strip"></div>
+</div>
+
+<script>
+  // ── PHOTO DATA ──
+  // All labeled photos from justinpstudio.com
+  const BASE = 'https://images.squarespace-cdn.com/content/v1/659031f34313f00569f486f6/';
+
+  const locations = [
+    {
+      name: 'Torres del Paine, Chile',
+      lat: -50.9423, lng: -73.4068,
+      photos: [
+        BASE + '8eefcb08-6b09-4416-b7cd-d44ea4d04abf/DSC_9086.jpg',
+        BASE + '913a88b6-172e-46ff-9cff-05aad873f707/DSC_9542.jpg',
+        BASE + '0dcc512f-57b4-4a31-9aac-be6ed9491dc1/DSC_9432.jpg',
+      ]
+    },
+    {
+      name: 'Rio de Janeiro, Brazil',
+      lat: -22.9068, lng: -43.1729,
+      photos: [BASE + 'b2929d68-abb8-4fe0-8e55-639105ee2255/DSC_1064.jpg']
+    },
+    {
+      name: 'Salvador, Brazil',
+      lat: -12.9714, lng: -38.5014,
+      photos: [BASE + '472b8d45-2938-4c42-ae9a-a2d37c25bf1b/DSC_1119.jpg']
+    },
+    {
+      name: 'Warsaw, Poland',
+      lat: 52.2297, lng: 21.0122,
+      photos: [BASE + '3703fed4-6528-4803-bf0d-255444e7655c/DSC_0639.jpg']
+    },
+    {
+      name: 'Los Glaciares, Argentina',
+      lat: -49.8, lng: -73.1,
+      photos: [BASE + 'dca9d149-c868-4060-b821-69a8930b9250/DSC_8758.jpg']
+    },
+    {
+      name: 'El Calafate, Argentina',
+      lat: -50.3397, lng: -72.2755,
+      photos: [BASE + '09e8f566-de55-4b40-a825-5bd3b9f34db1/DSC_8869.jpg']
+    },
+    {
+      name: 'Tossa de Mar, Spain',
+      lat: 41.7216, lng: 2.9342,
+      photos: [
+        BASE + '8c2bf6dd-59d5-4976-93d6-99fb9c28743f/DSC_6296.jpg',
+        BASE + '51a2225d-778b-4c53-a9ff-c8c855e3d7d2/DSC_6370.jpg',
+        BASE + '26e19f6e-28b5-4586-9a3f-b59fa4d83cd5/DSC_6375.jpg',
+      ]
+    },
+    {
+      name: 'Pyrenees, Spain',
+      lat: 42.66, lng: 1.05,
+      photos: [
+        BASE + 'f70e462d-7100-469b-b687-e2d11cc89295/DSC_6240.jpg',
+        BASE + 'f7c6b85c-e03a-4893-82ee-a056c28e5c9e/DSC_6284.jpg',
+        BASE + 'a83fcd2f-1610-43cc-9192-43f1240d3ea8/DSC_6096.jpg',
+      ]
+    },
+    {
+      name: 'Espot, Spain',
+      lat: 42.5869, lng: 1.0934,
+      photos: [BASE + 'b81d4a0b-216c-478b-bcba-5ee8f196a2c4/DSC_6104.jpg']
+    },
+    {
+      name: 'Suzhou, China',
+      lat: 31.2983, lng: 120.5832,
+      photos: [
+        BASE + '75c5fcea-5b08-4c45-b042-97a2a44abc40/DSC_7357.jpg',
+        BASE + 'e2e0e55f-d324-4ea9-a5e2-ca3ecabf7ccf/DSC_7078.jpg',
+        BASE + '8b450ea4-c50a-4e89-acb9-ee253eac8d1e/DSC_7169.jpg',
+      ]
+    },
+    {
+      name: 'Shanghai, China',
+      lat: 31.2304, lng: 121.4737,
+      photos: [
+        BASE + 'b4bccf0b-aa77-46dd-852e-4448246bb7a9/DSC_7549.jpg',
+        BASE + '7c98c3e9-6a39-4e76-92fa-04c910812cd5/DSC_7311.jpg',
+        BASE + 'b08d5c04-6d0b-4fc1-9046-b66292caa939/DSC_6903.jpg',
+        BASE + '2bb994de-5a91-4928-b993-8974e2b7e9a6/DSC_7627.jpg',
+        BASE + '98445969-5775-4c71-b820-ea33fec37cb8/DSC_7698.jpg',
+        BASE + 'ac0cf754-e5e4-4a7b-bade-511bf5418e50/DSC_6841.jpg',
+      ]
+    },
+    {
+      name: 'Yuyao, China',
+      lat: 29.9878, lng: 121.1488,
+      photos: [BASE + '40320fb3-f06b-4c3b-824a-fdd458a2151d/DSC_7319.jpg']
+    },
+    {
+      name: 'Brooklyn, NY',
+      lat: 40.6782, lng: -73.9442,
+      photos: [
+        BASE + '5d148512-5256-4217-be5d-5a42aa903774/DSC_8475.jpg',
+        BASE + '1d3ae196-fbbe-4c48-a734-26317ef93e56/DSC_8487.jpg',
+        BASE + '7b571820-b934-4dc7-87ed-05f757c96bf8/DSC_8437.jpg',
+        BASE + '016d6a97-a64a-4edc-9a3b-d282ddfb4d25/DSC_5686.jpg',
+      ]
+    },
+    {
+      name: 'Lancaster, PA',
+      lat: 40.0379, lng: -76.3055,
+      photos: [
+        BASE + '40d2ef9c-d5e8-4299-8a3b-8d6d4d6399ca/DSC_8020.jpg',
+        BASE + '9afa8f77-8f81-47b2-b776-c61fc53b2b27/DSC_7969.jpg',
+      ]
+    },
+    {
+      name: 'Cornwall, NY',
+      lat: 41.4284, lng: -74.0002,
+      photos: [BASE + '88080287-74cd-49b4-8f99-4ff955adf9d0/DSC_6062.jpg']
+    },
+    {
+      name: 'Athens, Greece',
+      lat: 37.9838, lng: 23.7275,
+      photos: [BASE + '166aa10b-1c5d-420e-ace9-fea8c6ed3971/DSC_5264.jpg']
+    },
+    {
+      name: 'Corfu, Greece',
+      lat: 39.6243, lng: 19.9217,
+      photos: [
+        BASE + 'a749e11f-e2e8-49ab-8f60-fc4278ff4713/DSC_5002.jpg',
+        BASE + '69a473d1-706d-4604-8f1a-3a2c8ce2efda/DSC_4782.jpg',
+        BASE + '8faa9804-cfd4-49ea-8481-95ee817a5658/DSC_5121.jpg',
+      ]
+    },
+    {
+      name: 'Sounion, Greece',
+      lat: 37.6520, lng: 24.0184,
+      photos: [
+        BASE + '2c6c2f1a-9d86-4cef-97f9-1791629971ce/DSC_5431.jpg',
+        BASE + 'f883f480-3eb2-4dd2-8322-f8cab78ed92d/DSC_5574.jpg',
+      ]
+    },
+    {
+      name: 'Prague, Czech Republic',
+      lat: 50.0755, lng: 14.4378,
+      photos: [BASE + '88b1353f-ea58-4d3e-86f7-de7cafb192ae/DSC_3934.jpg']
+    },
+    {
+      name: 'Ljubljana, Slovenia',
+      lat: 46.0569, lng: 14.5058,
+      photos: [BASE + '79352d05-2987-4b86-b69f-d291343a4d25/DSC_4623.jpg']
+    },
+    {
+      name: 'Lake Bled, Slovenia',
+      lat: 46.3638, lng: 14.0939,
+      photos: [BASE + 'de98f335-89a8-465c-ade6-53cc0503e870/DSC_4445.jpg']
+    },
+    {
+      name: 'Seattle, Washington',
+      lat: 47.6062, lng: -122.3321,
+      photos: [BASE + 'a7f127ff-1f6e-4448-af94-2a453c9c3387/DSC_8177.jpg']
+    },
+    {
+      name: 'Islamabad, Pakistan',
+      lat: 33.7294, lng: 73.0931,
+      photos: [BASE + '3ead0a31-a793-4b45-82a3-c7378c54419f/DSC_5912.jpg']
+    },
+  ];
+
+  document.getElementById('photo-count-label').textContent = locations.length;
+
+  // ── MAP INIT ──
+  const map = L.map('map', {
+    center: [20, 15],
+    zoom: 2.5,
+    zoomControl: true,
+    attributionControl: true,
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: 'abcd',
+    maxZoom: 19
+  }).addTo(map);
+
+  // ── CAMERA ICON SVG ──
+  const cameraSVG = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M9 3L7.17 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.17L15 3H9zm3 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
+  </svg>`;
+
+  // ── LIGHTBOX STATE ──
+  let lbPhotos = [];
+  let lbIndex = 0;
+  let lbLocation = '';
+
+  function openLightbox(photos, idx, loc) {
+    lbPhotos = photos;
+    lbIndex = idx;
+    lbLocation = loc;
+    renderLightbox();
+    document.getElementById('lightbox').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function renderLightbox() {
+    const img = document.getElementById('lb-img');
+    img.classList.remove('loaded');
+    img.src = lbPhotos[lbIndex];
+    img.onload = () => img.classList.add('loaded');
+
+    document.getElementById('lb-location').textContent = lbLocation;
+    document.getElementById('lb-counter').textContent =
+      lbPhotos.length > 1 ? `${lbIndex + 1} / ${lbPhotos.length}` : '';
+
+    const prev = document.getElementById('lb-prev');
+    const next = document.getElementById('lb-next');
+    prev.classList.toggle('hidden', lbPhotos.length <= 1 || lbIndex === 0);
+    next.classList.toggle('hidden', lbPhotos.length <= 1 || lbIndex === lbPhotos.length - 1);
+
+    // thumbnail strip
+    const strip = document.getElementById('lb-strip');
+    strip.innerHTML = '';
+    if (lbPhotos.length > 1) {
+      lbPhotos.forEach((src, i) => {
+        const t = document.createElement('div');
+        t.className = 'lb-strip-thumb' + (i === lbIndex ? ' active' : '');
+        t.innerHTML = `<img src="${src}" alt="">`;
+        t.addEventListener('click', () => { lbIndex = i; renderLightbox(); });
+        strip.appendChild(t);
+      });
+      // scroll active thumb into view
+      const active = strip.querySelector('.active');
+      if (active) active.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    }
+  }
+
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.getElementById('lb-close').addEventListener('click', closeLightbox);
+  document.getElementById('lb-prev').addEventListener('click', () => {
+    if (lbIndex > 0) { lbIndex--; renderLightbox(); }
+  });
+  document.getElementById('lb-next').addEventListener('click', () => {
+    if (lbIndex < lbPhotos.length - 1) { lbIndex++; renderLightbox(); }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!document.getElementById('lightbox').classList.contains('open')) return;
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft' && lbIndex > 0) { lbIndex--; renderLightbox(); }
+    if (e.key === 'ArrowRight' && lbIndex < lbPhotos.length - 1) { lbIndex++; renderLightbox(); }
+  });
+  document.getElementById('lightbox').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('lightbox')) closeLightbox();
+  });
+
+  // ── BUILD POPUP HTML ──
+  function buildPopup(loc) {
+    const n = loc.photos.length;
+    let gridClass = n === 1 ? 'single' : n === 2 ? 'two' : '';
+    const shown = loc.photos.slice(0, 6);
+
+    let thumbsHTML = shown.map((src, i) => `
+      <div class="popup-thumb" data-idx="${i}">
+        <img src="${src}?format=300w" alt="${loc.name}" loading="lazy">
+      </div>
+    `).join('');
+
+    const viewAll = n > 6 ? `<div class="popup-view-all" data-all="true">View all ${n} photos →</div>` : '';
+
+    return `
+      <div class="popup-inner">
+        <div class="popup-location">${loc.name}</div>
+        <div class="popup-grid ${gridClass}">${thumbsHTML}</div>
+        ${viewAll}
+      </div>
+    `;
+  }
+
+  // ── ADD MARKERS ──
+  locations.forEach(loc => {
+    const iconHTML = `
+      <div class="photo-marker-wrap">
+        <div class="photo-marker-icon">${cameraSVG}</div>
+        ${loc.photos.length > 1 ? `<div class="marker-count">${loc.photos.length}</div>` : ''}
+      </div>
+    `;
+
+    const icon = L.divIcon({
+      html: iconHTML,
+      className: '',
+      iconSize: [42, 42],
+      iconAnchor: [21, 21],
+      popupAnchor: [0, -24]
+    });
+
+    const marker = L.marker([loc.lat, loc.lng], { icon }).addTo(map);
+
+    const popup = L.popup({
+      maxWidth: 280,
+      minWidth: 280,
+      closeButton: true,
+      className: 'photo-popup'
+    }).setContent(buildPopup(loc));
+
+    marker.bindPopup(popup);
+
+    marker.on('popupopen', () => {
+      // attach click listeners to thumbnails after popup renders
+      const el = marker.getPopup().getElement();
+      if (!el) return;
+      el.querySelectorAll('.popup-thumb').forEach(thumb => {
+        thumb.addEventListener('click', () => {
+          const idx = parseInt(thumb.dataset.idx);
+          marker.closePopup();
+          openLightbox(loc.photos, idx, loc.name);
+        });
+      });
+      const viewAll = el.querySelector('[data-all]');
+      if (viewAll) {
+        viewAll.addEventListener('click', () => {
+          marker.closePopup();
+          openLightbox(loc.photos, 0, loc.name);
+        });
+      }
+    });
+  });
+</script>
+</body>
+</html>
